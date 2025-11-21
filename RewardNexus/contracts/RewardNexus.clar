@@ -210,6 +210,40 @@
     )
 )
 
+;; Claim redistribution rewards
+(define-public (claim-rewards)
+    (let
+        (
+            (user tx-sender)
+            (is-registered (default-to false (map-get? registered-users user)))
+            (last-claim (default-to block-height (map-get? last-claim-block user)))
+            (blocks-since-claim (- block-height last-claim))
+            (reward-share (calculate-redistribution-share user))
+        )
+        (asserts! is-registered err-not-registered)
+        (asserts! (var-get redistribution-active) err-redistribution-locked)
+        (asserts! (>= blocks-since-claim min-holding-period) err-redistribution-locked)
+        (asserts! (> reward-share u0) err-no-rewards)
+        
+        ;; Update cumulative holdings
+        (update-cumulative-holdings user)
+        
+        ;; Transfer rewards from pool to user
+        (map-set balances user 
+            (+ (default-to u0 (map-get? balances user)) reward-share))
+        (var-set redistribution-pool (- (var-get redistribution-pool) reward-share))
+        
+        ;; Update claim block
+        (map-set last-claim-block user block-height)
+        
+        ;; Update participation score (claiming is an activity)
+        (update-participation-score user)
+        (map-set last-activity-block user block-height)
+        
+        (ok reward-share)
+    )
+)
+
 ;; Toggle redistribution system (owner only)
 (define-public (toggle-redistribution)
     (begin
